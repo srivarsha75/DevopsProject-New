@@ -15,6 +15,8 @@ app.config['MAIL_PASSWORD'] = 'your_email_password'
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
 app.config['MAIL_DEFAULT_SENDER'] = 'your_email@gmail.com'
+# For development, disable actual sending
+app.config['MAIL_SUPPRESS_SEND'] = True
 
 mail = Mail(app)
 
