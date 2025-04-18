@@ -49,8 +49,8 @@ This project implements a complete CI/CT/CD pipeline using Git, Jenkins, and Doc
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/finance-tracker.git
-   cd finance-tracker
+   git clone https://github.com/Ayush-Bitla/DevOpsProject.git
+   cd DevOpsProject
    ```
 
 2. Install dependencies:
@@ -113,12 +113,6 @@ finance-tracker/
 │
 └── screenshots/          # Application screenshots
 ```
-
-## Team Members and Responsibilities
-
-- Developer 1: Backend Development, Database Design
-- Developer 2: Frontend Development, UI/UX Design
-- Developer 3: CI/CD Pipeline Configuration, Testing Framework
 
 ## License
 
