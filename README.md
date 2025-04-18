@@ -90,7 +90,7 @@ pytest --cov=. --cov-report=term
 ## Project Structure
 
 ```
-finance-tracker/
+DevOpsProject/
 │
 ├── app.py                # Main application file
 ├── requirements.txt      # Python dependencies
