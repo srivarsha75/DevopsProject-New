@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Flask
+instance/
+.webassets-cache
+
+# Database
+*.sqlite
+*.db
+*.db-journal
+
+# Virtual Environment
+venv/
+ENV/
+.env
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+.tox/
+nosetests.xml
+
+# Docker
+.docker/
+
+# Jenkins
+.jenkins/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log 
