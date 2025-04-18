@@ -3,6 +3,7 @@ from datetime import datetime
 import sqlite3
 from collections import defaultdict
 from flask_mail import Mail, Message
+import json
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
@@ -60,6 +61,19 @@ def init_db():
             UNIQUE(user_id, category, month, year)
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            category TEXT NOT NULL,
+            type TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            is_read INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -82,9 +96,37 @@ def index():
         total_upi = sum(transaction[2] for transaction in transactions if transaction[6] == 'UPI')
         total_cash = sum(transaction[2] for transaction in transactions if transaction[6] == 'Cash')
         
+        # Get user email
+        c.execute("SELECT email FROM users WHERE id = ?", (user_id,))
+        email_result = c.fetchone()
+        email = email_result[0] if email_result else ""
+        
+        # Get recent notifications (limited to 5)
+        c.execute("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 5", (user_id,))
+        notifications = c.fetchall()
+        
+        # Format notifications for display
+        recent_notifications = []
+        for n in notifications:
+            recent_notifications.append({
+                'id': n[0],
+                'title': n[2],
+                'message': n[3],
+                'category': n[4],
+                'type': n[5],
+                'created_at': n[6],
+                'is_read': n[7]
+            })
+        
         conn.close()
 
-        return render_template('index.html', username=username, total_amount=total_amount, total_upi=total_upi, total_cash=total_cash)
+        return render_template('index.html', 
+                              username=username,
+                              email=email,
+                              total_amount=total_amount, 
+                              total_upi=total_upi, 
+                              total_cash=total_cash,
+                              recent_notifications=recent_notifications)
     return redirect(url_for('login'))
 
 
@@ -375,7 +417,7 @@ def set_budget():
         return redirect(url_for('login'))
 
 def check_budget_threshold(user_id, category, conn):
-    """Check if the user has exceeded their budget threshold and send email notification if needed."""
+    """Check if the user has exceeded their budget threshold and send notifications if needed."""
     c = conn.cursor()
     
     # Get current month and year
@@ -413,23 +455,38 @@ def check_budget_threshold(user_id, category, conn):
     
     # Check if user has exceeded threshold (80% of budget)
     if percentage_used >= 80:
-        # Get user email
-        c.execute("SELECT email FROM users WHERE id = ?", (user_id,))
-        email_result = c.fetchone()
-        
-        if email_result:
-            user_email = email_result[0]
+        # Create notification
+        if percentage_used >= 100:
+            title = f"Budget Exceeded: {category}"
+            message = f"You have exceeded your budget for {category}. Budget: ₹{budget_amount:.2f}, Spent: ₹{spent_amount:.2f}, Percentage: {percentage_used:.1f}%"
+            notification_type = "danger"
             
-            # Send email notification
+            # Add UI notification
+            add_notification(user_id, title, message, category, notification_type)
+            
+            # Show flash message
+            flash(f'Warning: You have exceeded your budget for {category}!', 'danger')
+        else:
+            title = f"Budget Alert: {category}"
+            message = f"You have used {percentage_used:.1f}% of your budget for {category}. Budget: ₹{budget_amount:.2f}, Spent: ₹{spent_amount:.2f}, Remaining: ₹{budget_amount-spent_amount:.2f}"
+            notification_type = "warning"
+            
+            # Add UI notification
+            add_notification(user_id, title, message, category, notification_type)
+            
+            # Show flash message
+            flash(f'Notice: You have used {percentage_used:.1f}% of your budget for {category}.', 'warning')
+        
+        # Still try to send email if not suppressed
+        if not app.config.get('MAIL_SUPPRESS_SEND', True):
             try:
-                send_budget_alert(user_email, category, budget_amount, spent_amount, percentage_used)
+                # Get user email
+                c.execute("SELECT email FROM users WHERE id = ?", (user_id,))
+                email_result = c.fetchone()
                 
-                # Log notification in flash message
-                if percentage_used >= 100:
-                    flash(f'Warning: You have exceeded your budget for {category}!', 'danger')
-                else:
-                    flash(f'Notice: You have used {percentage_used:.1f}% of your budget for {category}.', 'warning')
-                    
+                if email_result:
+                    user_email = email_result[0]
+                    send_budget_alert(user_email, category, budget_amount, spent_amount, percentage_used)
             except Exception as e:
                 print(f"Failed to send email: {str(e)}")
 
@@ -463,6 +520,240 @@ def send_budget_alert(email, category, budget, spent, percentage):
     
     msg = Message(subject=subject, recipients=[email], html=body)
     mail.send(msg)
+
+@app.route('/notifications')
+def view_notifications():
+    if 'username' in session:
+        user_id = session['user_id']
+        username = session['username']
+        
+        # Get notifications for the user
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+        notifications = c.fetchall()
+        
+        # Format notifications for display
+        formatted_notifications = []
+        for n in notifications:
+            formatted_notifications.append({
+                'id': n[0],
+                'title': n[2],
+                'message': n[3],
+                'category': n[4],
+                'type': n[5],
+                'created_at': n[6],
+                'is_read': n[7]
+            })
+        
+        # Get unread count
+        c.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0", (user_id,))
+        unread_count = c.fetchone()[0]
+        
+        conn.close()
+        
+        return render_template('notifications.html', 
+                              username=username, 
+                              notifications=formatted_notifications,
+                              unread_count=unread_count)
+    else:
+        return redirect(url_for('login'))
+
+@app.route('/mark_notification_read/<int:notification_id>', methods=['POST'])
+def mark_notification_read(notification_id):
+    if 'username' in session:
+        user_id = session['user_id']
+        
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?", 
+                 (notification_id, user_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+@app.route('/unread_notification_count')
+def unread_notification_count():
+    if 'username' in session:
+        user_id = session['user_id']
+        
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0", (user_id,))
+        unread_count = c.fetchone()[0]
+        conn.close()
+        
+        return jsonify({'count': unread_count})
+    else:
+        return jsonify({'count': 0})
+
+def add_notification(user_id, title, message, category, type):
+    """Add a notification to the database."""
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    c.execute("""
+        INSERT INTO notifications 
+        (user_id, title, message, category, type, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (user_id, title, message, category, type, current_time))
+    
+    conn.commit()
+    conn.close()
+
+@app.route('/profile')
+def profile():
+    if 'username' in session:
+        user_id = session['user_id']
+        username = session['username']
+        
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        
+        # Get user email
+        c.execute("SELECT email FROM users WHERE id = ?", (user_id,))
+        email_result = c.fetchone()
+        email = email_result[0] if email_result else ""
+        
+        # Get recent notifications (limited to 5)
+        c.execute("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 5", (user_id,))
+        notifications = c.fetchall()
+        
+        # Format notifications for display
+        recent_notifications = []
+        for n in notifications:
+            recent_notifications.append({
+                'id': n[0],
+                'title': n[2],
+                'message': n[3],
+                'category': n[4],
+                'type': n[5],
+                'created_at': n[6],
+                'is_read': n[7]
+            })
+        
+        # Get budget alerts count (unread warning/danger notifications)
+        c.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0 AND (type = 'warning' OR type = 'danger')", (user_id,))
+        budget_alerts = c.fetchone()[0]
+        
+        # Get total spent
+        c.execute("SELECT SUM(amount) FROM transactions WHERE user_id = ?", (user_id,))
+        total_spent_result = c.fetchone()
+        total_spent = total_spent_result[0] if total_spent_result[0] else 0
+        
+        # Get current month's spending
+        current_date = datetime.now()
+        c.execute("""
+            SELECT SUM(amount) 
+            FROM transactions 
+            WHERE user_id = ? AND strftime('%m', date) = ? AND strftime('%Y', date) = ?
+        """, (user_id, current_date.strftime('%m'), current_date.strftime('%Y')))
+        monthly_spent_result = c.fetchone()
+        monthly_spent = monthly_spent_result[0] if monthly_spent_result[0] else 0
+        
+        conn.close()
+        
+        return render_template('profile.html', 
+                              username=username,
+                              email=email,
+                              recent_notifications=recent_notifications,
+                              budget_alerts=budget_alerts,
+                              total_spent=total_spent,
+                              monthly_spent=monthly_spent)
+    else:
+        return redirect(url_for('login'))
+
+@app.route('/test-icons')
+def test_icons():
+    return render_template('test-icons.html')
+
+@app.route('/test-budget-alert/<category>')
+def test_budget_alert(category):
+    """Route to test budget alert functionality for a given category."""
+    if 'username' in session:
+        user_id = session['user_id']
+        
+        conn = sqlite3.connect(DATABASE)
+        
+        # Manually trigger budget check
+        check_budget_threshold(user_id, category, conn)
+        
+        # Get budget data for information
+        c = conn.cursor()
+        current_date = datetime.now()
+        current_month = current_date.strftime('%B')
+        current_year = current_date.year
+        
+        # Get budget info
+        c.execute("SELECT amount, notifications_enabled FROM budgets WHERE user_id = ? AND category = ? AND month = ? AND year = ?", 
+                  (user_id, category, current_month, current_year))
+        budget_result = c.fetchone()
+        
+        # Get spending info
+        c.execute("""
+            SELECT SUM(amount) 
+            FROM transactions 
+            WHERE user_id = ? AND category = ? AND strftime('%m', date) = ? AND strftime('%Y', date) = ?
+        """, (user_id, category, current_date.strftime('%m'), current_date.strftime('%Y')))
+        spent_result = c.fetchone()
+        
+        conn.close()
+        
+        if not budget_result:
+            return f"No budget set for {category} in {current_month} {current_year}"
+        
+        budget_amount = budget_result[0]
+        notifications_enabled = "Enabled" if budget_result[1] else "Disabled"
+        spent_amount = spent_result[0] if spent_result and spent_result[0] else 0
+        percentage = (spent_amount / budget_amount * 100) if budget_amount > 0 else 0
+        
+        # Display debug info
+        debug_info = (
+            f"Budget check triggered for {category}<br>"
+            f"Budget: ₹{budget_amount:.2f}<br>"
+            f"Spent: ₹{spent_amount:.2f}<br>"
+            f"Percentage: {percentage:.1f}%<br>"
+            f"Notifications: {notifications_enabled}<br>"
+            f"Threshold check: {'Triggered' if percentage >= 80 else 'Not triggered'} (needs 80%+)"
+        )
+        
+        return debug_info
+    else:
+        return redirect(url_for('login'))
+
+@app.route('/add-test-transaction/<category>/<amount>')
+def add_test_transaction(category, amount):
+    """Add a test transaction for budget alert testing."""
+    if 'username' in session:
+        user_id = session['user_id']
+        date = datetime.now().strftime('%Y-%m-%d')
+        try:
+            amount = float(amount)
+        except ValueError:
+            return "Invalid amount"
+        
+        payment_method = "Test"
+        description = "Test transaction for budget alert"
+        
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("INSERT INTO transactions (user_id, date, category, amount, payment_method, description) VALUES (?, ?, ?, ?, ?, ?)",
+                  (user_id, date, category, amount, payment_method, description))
+        conn.commit()
+        
+        # Check budget threshold after adding transaction
+        check_budget_threshold(user_id, category, conn)
+        
+        conn.close()
+        
+        return f"Added test transaction of ₹{amount} to {category}. <a href='/test-budget-alert/{category}'>Check alert status</a>"
+    else:
+        return redirect(url_for('login'))
 
 if __name__ == '__main__':
     app.run(debug=True)
