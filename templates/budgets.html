@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}Budgets | Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="mb-3">Monthly Budgets</h2>
+            <h5 class="text-muted mb-4">{{ current_month }} {{ current_year }}</h5>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#setBudgetModal">
+                <i class="fas fa-plus"></i> Set Budget
+            </button>
+        </div>
+    </div>
+
+    {% if budget_data %}
+    <div class="row">
+        {% for item in budget_data %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ item.category }}</h5>
+                    {% if item.budget > 0 %}
+                    <span class="badge {% if item.percentage >= 90 %}bg-danger{% elif item.percentage >= 75 %}bg-warning{% else %}bg-success{% endif %}">
+                        {{ item.percentage|round }}%
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if item.budget > 0 %}
+                    <div class="mb-3">
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar {% if item.percentage >= 90 %}bg-danger{% elif item.percentage >= 75 %}bg-warning{% else %}bg-success{% endif %}" 
+                                role="progressbar" 
+                                style="width: {{ item.percentage }}%;" 
+                                aria-valuenow="{{ item.percentage }}" 
+                                aria-valuemin="0" 
+                                aria-valuemax="100">
+                                {{ item.percentage|round }}%
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Budget:</span>
+                        <strong>₹{{ item.budget|round(2) }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Spent:</span>
+                        <strong>₹{{ item.spent|round(2) }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Remaining:</span>
+                        <strong class="{% if item.remaining <= 0 %}text-danger{% else %}text-success{% endif %}">
+                            ₹{{ item.remaining|round(2) }}
+                        </strong>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted my-4">No budget set</p>
+                    <div class="text-center">
+                        <button class="btn btn-sm btn-outline-primary" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#setBudgetModal"
+                                data-category="{{ item.category }}">
+                            Set Budget
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if item.budget > 0 %}
+                <div class="card-footer text-center">
+                    <button class="btn btn-sm btn-outline-primary" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#setBudgetModal"
+                            data-category="{{ item.category }}" 
+                            data-amount="{{ item.budget }}">
+                        Edit Budget
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <p class="mb-0">You haven't set any budgets yet. Start by setting your first budget!</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Set Budget Modal -->
+<div class="modal fade" id="setBudgetModal" tabindex="-1" aria-labelledby="setBudgetModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="setBudgetModalLabel">Set Monthly Budget</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('set_budget') }}" method="post">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="category" class="form-label">Category</label>
+                        <select class="form-select" id="categorySelect" name="category" required>
+                            <option value="" selected disabled>Select Category</option>
+                            {% for category in categories %}
+                            <option value="{{ category }}">{{ category }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="amount" class="form-label">Budget Amount (₹)</label>
+                        <input type="number" class="form-control" id="budgetAmount" name="amount" step="0.01" min="0" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="month" class="form-label">Month</label>
+                            <select class="form-select" id="month" name="month" required>
+                                <option value="January" {% if current_month == 'January' %}selected{% endif %}>January</option>
+                                <option value="February" {% if current_month == 'February' %}selected{% endif %}>February</option>
+                                <option value="March" {% if current_month == 'March' %}selected{% endif %}>March</option>
+                                <option value="April" {% if current_month == 'April' %}selected{% endif %}>April</option>
+                                <option value="May" {% if current_month == 'May' %}selected{% endif %}>May</option>
+                                <option value="June" {% if current_month == 'June' %}selected{% endif %}>June</option>
+                                <option value="July" {% if current_month == 'July' %}selected{% endif %}>July</option>
+                                <option value="August" {% if current_month == 'August' %}selected{% endif %}>August</option>
+                                <option value="September" {% if current_month == 'September' %}selected{% endif %}>September</option>
+                                <option value="October" {% if current_month == 'October' %}selected{% endif %}>October</option>
+                                <option value="November" {% if current_month == 'November' %}selected{% endif %}>November</option>
+                                <option value="December" {% if current_month == 'December' %}selected{% endif %}>December</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="year" class="form-label">Year</label>
+                            <input type="number" class="form-control" id="year" name="year" value="{{ current_year }}" min="2020" max="2030" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Budget</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Script to pre-fill the budget modal when editing
+    document.addEventListener('DOMContentLoaded', function() {
+        const setBudgetModal = document.getElementById('setBudgetModal');
+        if (setBudgetModal) {
+            setBudgetModal.addEventListener('show.bs.modal', function(event) {
+                const button = event.relatedTarget;
+                const category = button.getAttribute('data-category');
+                const amount = button.getAttribute('data-amount');
+                
+                const categorySelect = document.getElementById('categorySelect');
+                const budgetAmount = document.getElementById('budgetAmount');
+                
+                if (category) {
+                    // Find and select the correct option
+                    for (let i = 0; i < categorySelect.options.length; i++) {
+                        if (categorySelect.options[i].value === category) {
+                            categorySelect.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                
+                if (amount) {
+                    budgetAmount.value = amount;
+                } else {
+                    budgetAmount.value = '';
+                }
+            });
+        }
+    });
+</script>
+{% endblock %} 

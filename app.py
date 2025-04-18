@@ -33,6 +33,18 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS budgets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            category TEXT NOT NULL,
+            amount REAL NOT NULL,
+            month TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            UNIQUE(user_id, category, month, year)
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -233,6 +245,106 @@ def statistics():
                                top_spending_categories=top_spending_categories)
     else:
         # Redirect to login page if user is not logged in
+        return redirect(url_for('login'))
+
+@app.route('/budgets')
+def budgets():
+    if 'username' in session:
+        user_id = session['user_id']
+        username = session['username']
+        
+        # Get current month and year
+        current_date = datetime.now()
+        current_month = current_date.strftime('%B')
+        current_year = current_date.year
+        
+        # Fetch budgets for the current month
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("SELECT category, amount FROM budgets WHERE user_id = ? AND month = ? AND year = ?", 
+                 (user_id, current_month, current_year))
+        budgets = c.fetchall()
+        
+        # Get spending by category for current month
+        c.execute("""
+            SELECT category, SUM(amount) 
+            FROM transactions 
+            WHERE user_id = ? AND strftime('%m', date) = ? AND strftime('%Y', date) = ?
+            GROUP BY category
+        """, (user_id, current_date.strftime('%m'), current_date.strftime('%Y')))
+        spending = dict(c.fetchall())
+        
+        # Get all categories from transactions for budget setting
+        c.execute("SELECT DISTINCT category FROM transactions WHERE user_id = ?", (user_id,))
+        categories = [row[0] for row in c.fetchall()]
+        
+        # Add common categories if not already in list
+        common_categories = ["Food", "Transportation", "Entertainment", "Utilities", "Shopping", "Health", "Education"]
+        for category in common_categories:
+            if category not in categories:
+                categories.append(category)
+        
+        # Convert budgets to dict for easy comparison
+        budget_dict = dict(budgets)
+        
+        # Create budget data for display
+        budget_data = []
+        for category in categories:
+            budget_amount = budget_dict.get(category, 0)
+            spent_amount = spending.get(category, 0)
+            remaining = budget_amount - spent_amount if budget_amount > 0 else 0
+            percentage = (spent_amount / budget_amount * 100) if budget_amount > 0 else 0
+            
+            budget_data.append({
+                'category': category,
+                'budget': budget_amount,
+                'spent': spent_amount,
+                'remaining': remaining,
+                'percentage': min(percentage, 100)  # Cap at 100%
+            })
+        
+        conn.close()
+        
+        return render_template('budgets.html', 
+                              username=username, 
+                              budget_data=budget_data, 
+                              categories=categories,
+                              current_month=current_month,
+                              current_year=current_year)
+    else:
+        return redirect(url_for('login'))
+
+@app.route('/set_budget', methods=['POST'])
+def set_budget():
+    if 'username' in session:
+        user_id = session['user_id']
+        category = request.form['category']
+        amount = float(request.form['amount'])
+        month = request.form['month']
+        year = int(request.form['year'])
+        
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        
+        # Check if budget already exists for this category/month/year
+        c.execute("SELECT id FROM budgets WHERE user_id = ? AND category = ? AND month = ? AND year = ?", 
+                 (user_id, category, month, year))
+        existing = c.fetchone()
+        
+        if existing:
+            # Update existing budget
+            c.execute("UPDATE budgets SET amount = ? WHERE id = ?", (amount, existing[0]))
+        else:
+            # Create new budget
+            c.execute("INSERT INTO budgets (user_id, category, amount, month, year) VALUES (?, ?, ?, ?, ?)",
+                     (user_id, category, amount, month, year))
+        
+        conn.commit()
+        conn.close()
+        
+        flash(f'Budget for {category} set successfully!', 'success')
+        return redirect(url_for('budgets'))
+    else:
         return redirect(url_for('login'))
 
 if __name__ == '__main__':
