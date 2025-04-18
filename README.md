@@ -1,4 +1,4 @@
-# Finance Tracker
+# Finance Tracker Flask App
 
 A web-based application for tracking personal finances, expenses, and income.
 
