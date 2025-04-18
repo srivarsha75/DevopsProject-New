@@ -2,9 +2,21 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from datetime import datetime
 import sqlite3
 from collections import defaultdict
+from flask_mail import Mail, Message
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
+
+# Email configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USERNAME'] = 'your_email@gmail.com'
+app.config['MAIL_PASSWORD'] = 'your_email_password'
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USE_SSL'] = False
+app.config['MAIL_DEFAULT_SENDER'] = 'your_email@gmail.com'
+
+mail = Mail(app)
 
 # SQLite database setup
 DATABASE = 'finance_tracker.db'
@@ -41,6 +53,7 @@ def init_db():
             amount REAL NOT NULL,
             month TEXT NOT NULL,
             year INTEGER NOT NULL,
+            notifications_enabled INTEGER DEFAULT 1,
             FOREIGN KEY (user_id) REFERENCES users (id),
             UNIQUE(user_id, category, month, year)
         )
@@ -139,10 +152,10 @@ def transactions():
 @app.route('/add_transaction', methods=['POST'])
 def add_transaction():
     if 'username' in session:
-        user_id = session['user_id']  # Assuming you store user_id in session
+        user_id = session['user_id']
         date = request.form['date']
         category = request.form['category']
-        amount = request.form['amount']
+        amount = float(request.form['amount'])
         payment_method = request.form['payment_method']
         description = request.form['notes']
 
@@ -151,6 +164,10 @@ def add_transaction():
         c.execute("INSERT INTO transactions (user_id, date, category, amount, payment_method, description) VALUES (?, ?, ?, ?, ?, ?)",
                   (user_id, date, category, amount, payment_method, description))
         conn.commit()
+        
+        # Check budget threshold after adding transaction
+        check_budget_threshold(user_id, category, conn)
+        
         conn.close()
 
         return redirect(url_for('transactions'))
@@ -261,9 +278,9 @@ def budgets():
         # Fetch budgets for the current month
         conn = sqlite3.connect(DATABASE)
         c = conn.cursor()
-        c.execute("SELECT category, amount FROM budgets WHERE user_id = ? AND month = ? AND year = ?", 
+        c.execute("SELECT category, amount, notifications_enabled FROM budgets WHERE user_id = ? AND month = ? AND year = ?", 
                  (user_id, current_month, current_year))
-        budgets = c.fetchall()
+        budgets_data = c.fetchall()
         
         # Get spending by category for current month
         c.execute("""
@@ -285,12 +302,17 @@ def budgets():
                 categories.append(category)
         
         # Convert budgets to dict for easy comparison
-        budget_dict = dict(budgets)
+        budget_dict = {}
+        notifications_dict = {}
+        for budget in budgets_data:
+            budget_dict[budget[0]] = budget[1]
+            notifications_dict[budget[0]] = budget[2]
         
         # Create budget data for display
         budget_data = []
         for category in categories:
             budget_amount = budget_dict.get(category, 0)
+            notifications_enabled = notifications_dict.get(category, 1)
             spent_amount = spending.get(category, 0)
             remaining = budget_amount - spent_amount if budget_amount > 0 else 0
             percentage = (spent_amount / budget_amount * 100) if budget_amount > 0 else 0
@@ -300,7 +322,8 @@ def budgets():
                 'budget': budget_amount,
                 'spent': spent_amount,
                 'remaining': remaining,
-                'percentage': min(percentage, 100)  # Cap at 100%
+                'percentage': min(percentage, 100),  # Cap at 100%
+                'notifications_enabled': notifications_enabled
             })
         
         conn.close()
@@ -322,6 +345,7 @@ def set_budget():
         amount = float(request.form['amount'])
         month = request.form['month']
         year = int(request.form['year'])
+        notifications_enabled = 1 if 'enable_notifications' in request.form else 0
         
         conn = sqlite3.connect(DATABASE)
         c = conn.cursor()
@@ -333,11 +357,12 @@ def set_budget():
         
         if existing:
             # Update existing budget
-            c.execute("UPDATE budgets SET amount = ? WHERE id = ?", (amount, existing[0]))
+            c.execute("UPDATE budgets SET amount = ?, notifications_enabled = ? WHERE id = ?", 
+                     (amount, notifications_enabled, existing[0]))
         else:
             # Create new budget
-            c.execute("INSERT INTO budgets (user_id, category, amount, month, year) VALUES (?, ?, ?, ?, ?)",
-                     (user_id, category, amount, month, year))
+            c.execute("INSERT INTO budgets (user_id, category, amount, month, year, notifications_enabled) VALUES (?, ?, ?, ?, ?, ?)",
+                     (user_id, category, amount, month, year, notifications_enabled))
         
         conn.commit()
         conn.close()
@@ -346,6 +371,96 @@ def set_budget():
         return redirect(url_for('budgets'))
     else:
         return redirect(url_for('login'))
+
+def check_budget_threshold(user_id, category, conn):
+    """Check if the user has exceeded their budget threshold and send email notification if needed."""
+    c = conn.cursor()
+    
+    # Get current month and year
+    current_date = datetime.now()
+    current_month = current_date.strftime('%B')
+    current_year = current_date.year
+    
+    # Get budget for the category
+    c.execute("SELECT amount, notifications_enabled FROM budgets WHERE user_id = ? AND category = ? AND month = ? AND year = ?", 
+              (user_id, category, current_month, current_year))
+    budget_result = c.fetchone()
+    
+    if not budget_result:
+        return  # No budget set for this category
+    
+    budget_amount = budget_result[0]
+    notifications_enabled = budget_result[1]
+    
+    # If notifications are disabled, return
+    if not notifications_enabled:
+        return
+    
+    # Get total spent for this category in the current month
+    c.execute("""
+        SELECT SUM(amount) 
+        FROM transactions 
+        WHERE user_id = ? AND category = ? AND strftime('%m', date) = ? AND strftime('%Y', date) = ?
+    """, (user_id, category, current_date.strftime('%m'), current_date.strftime('%Y')))
+    
+    spent_result = c.fetchone()
+    spent_amount = spent_result[0] if spent_result[0] else 0
+    
+    # Calculate percentage of budget used
+    percentage_used = (spent_amount / budget_amount) * 100 if budget_amount > 0 else 0
+    
+    # Check if user has exceeded threshold (80% of budget)
+    if percentage_used >= 80:
+        # Get user email
+        c.execute("SELECT email FROM users WHERE id = ?", (user_id,))
+        email_result = c.fetchone()
+        
+        if email_result:
+            user_email = email_result[0]
+            
+            # Send email notification
+            try:
+                send_budget_alert(user_email, category, budget_amount, spent_amount, percentage_used)
+                
+                # Log notification in flash message
+                if percentage_used >= 100:
+                    flash(f'Warning: You have exceeded your budget for {category}!', 'danger')
+                else:
+                    flash(f'Notice: You have used {percentage_used:.1f}% of your budget for {category}.', 'warning')
+                    
+            except Exception as e:
+                print(f"Failed to send email: {str(e)}")
+
+def send_budget_alert(email, category, budget, spent, percentage):
+    """Send an email alert about budget threshold."""
+    subject = f"Budget Alert: {category}"
+    
+    if percentage >= 100:
+        subject = f"Budget Exceeded: {category}"
+        body = f"""
+        <h2>Budget Alert</h2>
+        <p>You have <strong>exceeded</strong> your budget for <strong>{category}</strong>.</p>
+        <ul>
+            <li>Budget: ₹{budget:.2f}</li>
+            <li>Spent: ₹{spent:.2f}</li>
+            <li>Percentage: {percentage:.1f}%</li>
+        </ul>
+        <p>Please review your spending in this category.</p>
+        """
+    else:
+        body = f"""
+        <h2>Budget Alert</h2>
+        <p>You have used <strong>{percentage:.1f}%</strong> of your budget for <strong>{category}</strong>.</p>
+        <ul>
+            <li>Budget: ₹{budget:.2f}</li>
+            <li>Spent: ₹{spent:.2f}</li>
+            <li>Remaining: ₹{budget-spent:.2f}</li>
+        </ul>
+        <p>This is a courtesy notification to help you stay within your budget.</p>
+        """
+    
+    msg = Message(subject=subject, recipients=[email], html=body)
+    mail.send(msg)
 
 if __name__ == '__main__':
     app.run(debug=True)

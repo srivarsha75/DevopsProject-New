@@ -6,6 +6,7 @@ cycler==0.12.1
 Flask==3.0.2
 Flask-Login==0.6.3
 Flask-SQLAlchemy==3.1.1
+Flask-Mail==0.9.1
 fonttools==4.50.0
 greenlet==3.0.3
 itsdangerous==2.1.2
