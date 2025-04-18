@@ -1,0 +1,184 @@
+{% extends 'layout.html' %}
+
+{% block title %}User Profile - T₹ACK{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <!-- User Profile Information -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Profile Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-person-circle text-primary" style="font-size: 5rem;"></i>
+                        <h4>{{ username }}</h4>
+                        <p class="text-muted">{{ email }}</p>
+                    </div>
+                    
+                    <div class="list-group">
+                        <a href="{{ url_for('transactions') }}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-cash-coin me-2"></i> My Transactions
+                        </a>
+                        <a href="{{ url_for('budgets') }}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-pie-chart me-2"></i> My Budgets
+                        </a>
+                        <a href="{{ url_for('statistics') }}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-bar-chart me-2"></i> My Statistics
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Notifications -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Recent Notifications</h5>
+                    <a href="{{ url_for('view_notifications') }}" class="btn btn-light btn-sm">View All</a>
+                </div>
+                <div class="card-body">
+                    {% if recent_notifications %}
+                        <div class="list-group notification-list">
+                            {% for notification in recent_notifications %}
+                                <div class="list-group-item list-group-item-action {% if notification.is_read == 0 %}list-group-item-{{ notification.type }} active-notification{% endif %}">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">{{ notification.title }}</h6>
+                                        <small>{{ notification.created_at }}</small>
+                                    </div>
+                                    <p class="mb-1 small">{{ notification.message }}</p>
+                                    <div class="d-flex justify-content-between">
+                                        <small>Category: {{ notification.category }}</small>
+                                        {% if notification.is_read == 0 %}
+                                            <button class="btn btn-sm btn-outline-secondary mark-read-btn" 
+                                                    data-id="{{ notification.id }}">
+                                                Mark as read
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <p class="mb-0">You don't have any recent notifications.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Financial Summary -->
+            <div class="card mt-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Financial Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">Total Spent</h6>
+                                    <h4>₹{{ total_spent|default(0)|round(2) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">Budget Alerts</h6>
+                                    <h4>{{ budget_alerts|default(0) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">This Month</h6>
+                                    <h4>₹{{ monthly_spent|default(0)|round(2) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.active-notification {
+    border-left: 4px solid #007bff;
+}
+.list-group-item-danger {
+    border-left-color: #dc3545;
+}
+.list-group-item-warning {
+    border-left-color: #ffc107;
+}
+.notification-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners to mark as read buttons
+    const readButtons = document.querySelectorAll('.mark-read-btn');
+    readButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const notificationId = this.getAttribute('data-id');
+            markAsRead(notificationId, this);
+        });
+    });
+
+    function markAsRead(notificationId, buttonElement) {
+        // Send request to mark notification as read
+        fetch(`/mark_notification_read/${notificationId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove the active notification styling
+                const notificationItem = buttonElement.closest('.list-group-item');
+                notificationItem.classList.remove('list-group-item-warning', 'list-group-item-danger', 'active-notification');
+                
+                // Remove the button
+                buttonElement.remove();
+                
+                // Update notification count in nav
+                updateNotificationCount();
+            }
+        })
+        .catch(error => {
+            console.error('Error marking notification as read:', error);
+        });
+    }
+
+    function updateNotificationCount() {
+        fetch('/unread_notification_count')
+            .then(response => response.json())
+            .then(data => {
+                const notificationCountElement = document.getElementById('notification-count');
+                if (notificationCountElement) {
+                    if (data.count > 0) {
+                        notificationCountElement.textContent = data.count;
+                        notificationCountElement.style.display = 'inline-block';
+                    } else {
+                        notificationCountElement.style.display = 'none';
+                    }
+                }
+            });
+    }
+});
+</script>
+{% endblock %} 

@@ -1,79 +1,260 @@
-{% extends 'base.html' %}
+{% extends 'layout.html' %}
 
-{% block title %}
-Home - Finance Tracker
-{% endblock %}
+{% block title %}Home - T₹ACK{% endblock %}
 
 {% block content %}
-<div class="row mt-4">
+<div class="container mt-4">
     <h2>Welcome, {{ username }}!</h2>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Total UPI Transactions</h5>
-                <h6 class="card-subtitle mb-2 text-muted">₹{{ total_upi }}</h6>
+    
+    <div class="row mt-4">
+        <!-- User Profile Information -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Your Profile</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        <i class="bi bi-person-circle text-primary" style="font-size: 3rem;"></i>
+                        <h4>{{ username }}</h4>
+                        <p class="text-muted">{{ email }}</p>
+                    </div>
+                    
+                    <div class="list-group">
+                        <a href="{{ url_for('transactions') }}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-cash-coin me-2"></i> My Transactions
+                        </a>
+                        <a href="{{ url_for('budgets') }}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-pie-chart me-2"></i> My Budgets
+                        </a>
+                        <a href="{{ url_for('statistics') }}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-bar-chart me-2"></i> My Statistics
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Financial Summary -->
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Financial Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-2">
+                        <div class="col-12 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">Total Amount</h6>
+                                    <h4>₹{{ total_amount|default(0)|round(2) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">UPI</h6>
+                                    <h5>₹{{ total_upi|default(0)|round(2) }}</h5>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">Cash</h6>
+                                    <h5>₹{{ total_cash|default(0)|round(2) }}</h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Total Cash Transactions</h5>
-                <h6 class="card-subtitle mb-2 text-muted">₹{{ total_cash }}</h6>
+        
+        <!-- Recent Notifications -->
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Recent Notifications</h5>
+                    <a href="{{ url_for('view_notifications') }}" class="btn btn-light btn-sm">View All</a>
+                </div>
+                <div class="card-body">
+                    {% if recent_notifications %}
+                        <div class="list-group notification-list">
+                            {% for notification in recent_notifications %}
+                                <div class="list-group-item list-group-item-action {% if notification.is_read == 0 %}list-group-item-{{ notification.type }} active-notification{% endif %}">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">{{ notification.title }}</h6>
+                                        <small>{{ notification.created_at }}</small>
+                                    </div>
+                                    <p class="mb-1 small">{{ notification.message }}</p>
+                                    <div class="d-flex justify-content-between">
+                                        <small>Category: {{ notification.category }}</small>
+                                        {% if notification.is_read == 0 %}
+                                            <button class="btn btn-sm btn-outline-secondary mark-read-btn" 
+                                                    data-id="{{ notification.id }}">
+                                                Mark as read
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <p class="mb-0">You don't have any recent notifications.</p>
+                        </div>
+                    {% endif %}
+                </div>
             </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Total Amount</h5>
-                <h6 class="card-subtitle mb-2 text-muted">₹{{ total_amount }}</h6>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6 mt-4">
-        <div class="card">
-            <div class="card-header">
-                Amount Spent Each Day (This Month)
-            </div>
-            <div class="card-body">
-                <canvas id="dailySpendingChart" width="200" height="100"></canvas>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6 mt-4">
-        <div class="card">
-            <div class="card-header">
-                Amount Spent Each Day (This Month)
-            </div>
-            <div class="card-body">
-                <canvas id="monthlySpendingChart" width="200" height="100"></canvas>
+            
+            <!-- Spending Charts -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">Daily Spending</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="dailySpendingChart" width="100%" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">Monthly Spending</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="monthlySpendingChart" width="100%" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+.active-notification {
+    border-left: 4px solid #007bff;
+}
+.list-group-item-danger {
+    border-left-color: #dc3545;
+}
+.list-group-item-warning {
+    border-left-color: #ffc107;
+}
+.notification-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Fetch chart data
+        fetchDailySpendingData();
+        fetchMonthlySpendingData();
+        
+        // Add event listeners to mark as read buttons
+        const readButtons = document.querySelectorAll('.mark-read-btn');
+        readButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const notificationId = this.getAttribute('data-id');
+                markAsRead(notificationId, this);
+            });
+        });
+    });
+
+    // Function to mark notifications as read
+    function markAsRead(notificationId, buttonElement) {
+        fetch(`/mark_notification_read/${notificationId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove the active notification styling
+                const notificationItem = buttonElement.closest('.list-group-item');
+                notificationItem.classList.remove('list-group-item-warning', 'list-group-item-danger', 'active-notification');
+                
+                // Remove the button
+                buttonElement.remove();
+                
+                // Update notification count in nav
+                updateNotificationCount();
+            }
+        })
+        .catch(error => {
+            console.error('Error marking notification as read:', error);
+        });
+    }
+
+    // Function to fetch daily spending data
+    function fetchDailySpendingData() {
+        fetch('/daily_spending_data')
+            .then(response => response.json())
+            .then(data => {
+                renderDailySpendingChart(data);
+            })
+            .catch(error => console.error('Error fetching daily spending data:', error));
+    }
+
+    // Function to render the daily spending chart
+    function renderDailySpendingChart(data) {
+        const ctx = document.getElementById('dailySpendingChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'Amount Spent',
+                    data: data.amounts,
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    }
+
     // Function to fetch data for monthly spending
     function fetchMonthlySpendingData() {
         fetch('/monthly_spending_data')
             .then(response => response.json())
             .then(data => {
                 renderMonthlySpendingChart(data);
-            });
+            })
+            .catch(error => console.error('Error fetching monthly spending data:', error));
     }
 
     // Function to render the monthly spending chart
     function renderMonthlySpendingChart(data) {
         const ctx = document.getElementById('monthlySpendingChart').getContext('2d');
-        const chart = new Chart(ctx, {
+        new Chart(ctx, {
             type: 'line',
             data: {
                 labels: data.labels,
                 datasets: [{
                     label: 'Amount Spent',
                     data: data.amounts,
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
                     borderWidth: 1
                 }]
             },
@@ -82,57 +263,11 @@ Home - Finance Tracker
                     y: {
                         beginAtZero: true
                     }
-                }
+                },
+                responsive: true,
+                maintainAspectRatio: false
             }
         });
     }
-
-    // Fetch data and render chart when the page loads
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchMonthlySpendingData();
-    });
-
-    // Function to fetch data from Flask backend
-    function fetchDailySpendingData() {
-        fetch('/daily_spending_data')
-            .then(response => response.json())
-            .then(data => {
-                renderDailySpendingChart(data);
-            });
-    }
-
-    // Function to render the daily spending chart
-    function renderDailySpendingChart(data) {
-        const ctx = document.getElementById('dailySpendingChart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.labels,
-                datasets: [{
-                    label: 'Amount Spent',
-                    data: data.amounts,
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    }
-
-    // Fetch data and render chart when the page loads
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchDailySpendingData();
-    });
-
-    
 </script>
-
-
 {% endblock %}

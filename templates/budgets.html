@@ -1,6 +1,6 @@
-{% extends 'base.html' %}
+{% extends 'layout.html' %}
 
-{% block title %}Budgets | Finance Tracker{% endblock %}
+{% block title %}Budgets | T₹ACK{% endblock %}
 
 {% block content %}
 <div class="container py-4">
@@ -11,7 +11,7 @@
         </div>
         <div class="col-auto">
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#setBudgetModal">
-                <i class="fas fa-plus"></i> Set Budget
+                <i class="bi bi-plus"></i> Set Budget
             </button>
         </div>
     </div>
@@ -60,9 +60,9 @@
                     <div class="mt-2 text-center">
                         <small class="text-muted">
                             {% if item.notifications_enabled %}
-                            <i class="fas fa-bell text-primary"></i> Notifications enabled
+                            <i class="bi bi-bell"></i> Notifications enabled
                             {% else %}
-                            <i class="fas fa-bell-slash text-muted"></i> Notifications disabled
+                            <i class="bi bi-bell-slash"></i> Notifications disabled
                             {% endif %}
                         </small>
                     </div>

@@ -1,0 +1,105 @@
+{% extends 'layout.html' %}
+
+{% block title %}Notifications - T₹ACK{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="mb-4">Notifications</h1>
+    
+    {% if notifications %}
+        <div class="list-group">
+            {% for notification in notifications %}
+                <div class="list-group-item list-group-item-action {% if notification.is_read == 0 %}list-group-item-{{ notification.type }} active-notification{% endif %}">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ notification.title }}</h5>
+                        <small>{{ notification.created_at }}</small>
+                    </div>
+                    <p class="mb-1">{{ notification.message }}</p>
+                    <small>Category: {{ notification.category }}</small>
+                    {% if notification.is_read == 0 %}
+                        <button class="btn btn-sm btn-outline-secondary float-right mark-read-btn" 
+                                data-id="{{ notification.id }}">
+                            Mark as read
+                        </button>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <p>You don't have any notifications at this time.</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners to mark as read buttons
+    const readButtons = document.querySelectorAll('.mark-read-btn');
+    readButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const notificationId = this.getAttribute('data-id');
+            markAsRead(notificationId, this);
+        });
+    });
+
+    function markAsRead(notificationId, buttonElement) {
+        // Send request to mark notification as read
+        fetch(`/mark_notification_read/${notificationId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove the active notification styling
+                const notificationItem = buttonElement.closest('.list-group-item');
+                notificationItem.classList.remove('list-group-item-warning', 'list-group-item-danger', 'active-notification');
+                
+                // Remove the button
+                buttonElement.remove();
+                
+                // Update notification count in nav
+                updateNotificationCount();
+            }
+        })
+        .catch(error => {
+            console.error('Error marking notification as read:', error);
+        });
+    }
+
+    function updateNotificationCount() {
+        fetch('/unread_notification_count')
+            .then(response => response.json())
+            .then(data => {
+                const notificationCountElement = document.getElementById('notification-count');
+                if (notificationCountElement) {
+                    if (data.count > 0) {
+                        notificationCountElement.textContent = data.count;
+                        notificationCountElement.style.display = 'inline-block';
+                    } else {
+                        notificationCountElement.style.display = 'none';
+                    }
+                }
+            });
+    }
+});
+</script>
+
+<style>
+.active-notification {
+    border-left: 4px solid #007bff;
+}
+.list-group-item-danger {
+    border-left-color: #dc3545;
+}
+.list-group-item-warning {
+    border-left-color: #ffc107;
+}
+.mark-read-btn {
+    margin-top: 8px;
+}
+</style>
+{% endblock %} 

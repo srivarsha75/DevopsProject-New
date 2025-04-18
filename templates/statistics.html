@@ -1,58 +1,75 @@
-{% extends 'base.html' %}
+{% extends 'layout.html' %}
 
-{% block title %}
-Statistics - Finance Tracker
-{% endblock %}
+{% block title %}Statistics - T₹ACK{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <!-- Total Expenses -->
+    <h2 class="mb-4">Financial Statistics</h2>
+    
+    <div class="row">
+        <!-- Total Expenses -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Total Expenses</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h3 class="card-title">₹{{ total_expenses|default(0)|round(2) }}</h3>
+                    <p class="text-muted">Total amount spent across all categories</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Spending Categories -->
+        <div class="col-md-8 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Top Spending Categories</h5>
+                </div>
+                <div class="card-body">
+                    {% if top_spending_categories %}
+                        <ul class="list-group">
+                            {% for category, amount in top_spending_categories.items() %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>{{ category }}</span>
+                                <span class="badge bg-primary rounded-pill">₹{{ amount|round(2) }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-center">No spending data available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Expense Breakdown by Category -->
     <div class="card mb-4">
-        <div class="card-header">
-            Total Expenses
+        <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">Expense Breakdown by Category</h5>
         </div>
         <div class="card-body">
-            <h5 class="card-title">₹{{ total_expenses }}</h5>
-        </div>
-    </div>
-
-<!-- Expense Breakdown by Category -->
-<div class="card mb-4">
-    <div class="card-header">
-        Expense Breakdown by Category
-    </div>
-    <div class="card-body">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Category</th>
-                    <th>Amount (₹)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for category, amount in expense_by_category.items() %}
-                <tr>
-                    <td>{{ category }}</td>
-                    <td>₹{{ amount }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-
-    <!-- Top Spending Categories -->
-    <div class="card mb-4">
-        <div class="card-header">
-            Top Spending Categories
-        </div>
-        <div class="card-body">
-            <ul class="list-group">
-                {% for category, amount in top_spending_categories.items() %}
-                <li class="list-group-item">{{ category }}: ₹{{ amount }}</li>
-                {% endfor %}
-            </ul>
+            {% if expense_by_category %}
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th class="text-end">Amount (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for category, amount in expense_by_category.items() %}
+                        <tr>
+                            <td>{{ category }}</td>
+                            <td class="text-end">₹{{ amount|round(2) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="text-center">No expense data available.</p>
+            {% endif %}
         </div>
     </div>
 </div>
