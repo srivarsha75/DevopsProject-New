@@ -1,11 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        DOCKERHUB_USERNAME = credentials('dockerhub-username')
-        DOCKERHUB_PASSWORD = credentials('dockerhub-password')
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -16,41 +11,54 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 bat 'pip install -r requirements.txt'
-                bat 'pip install pytest pytest-flask pytest-cov'
+                bat 'pip install pytest pytest-flask pytest-cov flake8'
             }
         }
 
         stage('Linting') {
             steps {
-                bat 'pip install flake8'
                 bat 'flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics'
             }
         }
 
         stage('Test') {
             steps {
-                bat 'pytest --cov=. --cov-report=xml'
+                bat 'pytest --cov=. --cov-report=xml --junitxml=test-reports/results.xml'
             }
             post {
                 always {
-                    junit 'test-reports/*.xml'
-                    cobertura coberturaReportFile: 'coverage.xml'
+                    script {
+                        try {
+                            junit 'test-reports/*.xml'
+                        } catch (Exception e) {
+                            echo "JUnit report not found."
+                        }
+                        try {
+                            cobertura coberturaReportFile: 'coverage.xml'
+                        } catch (Exception e) {
+                            echo "Coverage report not found."
+                        }
+                    }
                 }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                bat "docker build -t %DOCKERHUB_USERNAME%/finance-tracker:latest ."
+                withCredentials([usernamePassword(credentialsId: 'ayushbitla-dockerhub', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    bat "docker build -t %USERNAME%/finance-tracker:latest ."
+                }
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                bat """
-                echo %DOCKERHUB_PASSWORD% | docker login -u %DOCKERHUB_USERNAME% --password-stdin
-                docker push %DOCKERHUB_USERNAME%/finance-tracker:latest
-                """
+                withCredentials([usernamePassword(credentialsId: 'ayushbitla-dockerhub', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    bat """
+                        echo %PASSWORD% | docker login -u %USERNAME% --password-stdin
+                        docker push %USERNAME%/finance-tracker:latest
+                    """
+                }
             }
         }
 
@@ -64,7 +72,9 @@ pipeline {
 
     post {
         always {
-            cleanWs()
+            node {
+                cleanWs()
+            }
         }
     }
 }
