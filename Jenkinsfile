@@ -55,7 +55,7 @@ pipeline {
 
         stage('Push Docker Image') {
     steps {
-        withCredentials([usernamePassword(credentialsId: 'jenkins_token', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
             bat """
                 echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
                 docker push ayushbitla/finance-tracker:latest
