@@ -46,7 +46,9 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'ayushbitla-dockerhub', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    bat "docker build -t %USERNAME%/finance-tracker:latest ."
+                    bat """
+                        docker build -t %USERNAME%/finance-tracker:latest .
+                    """
                 }
             }
         }
@@ -72,7 +74,16 @@ pipeline {
 
     post {
         always {
-            cleanWs()  // No need for the 'node' block here
+            // Clean up workspace after pipeline execution
+            cleanWs()
+        }
+
+        success {
+            echo "Pipeline completed successfully!"
+        }
+
+        failure {
+            echo "Pipeline failed. Please check the logs for more details."
         }
     }
 }
