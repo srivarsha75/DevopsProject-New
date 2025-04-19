@@ -5,15 +5,19 @@ from app import app, init_db
 
 @pytest.fixture
 def client():
+    # Create temp DB and close file descriptor to avoid Windows lock
+    db_fd, db_path = tempfile.mkstemp()
+    os.close(db_fd)
+
     app.config['TESTING'] = True
-    app.config['DATABASE'] = tempfile.mkstemp()[1]
-    
+    app.config['DATABASE'] = db_path
+
     with app.test_client() as client:
         with app.app_context():
             init_db()
         yield client
-    
-    os.unlink(app.config['DATABASE'])
+
+    os.unlink(db_path)
 
 def test_index_redirect(client):
     """Test that index redirects to login when not logged in."""
@@ -61,4 +65,4 @@ def test_valid_login(client):
     }, follow_redirects=True)
     
     assert response.status_code == 200
-    assert b'Dashboard' in response.data or b'Welcome' in response.data 
+    assert b'Dashboard' in response.data or b'Welcome' in response.data

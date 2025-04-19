@@ -63,8 +63,9 @@ pipeline {
     }
     
     post {
-        always {
+    always {
+        node {
             cleanWs()
         }
     }
-} 
+}
