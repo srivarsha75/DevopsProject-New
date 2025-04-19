@@ -72,9 +72,7 @@ pipeline {
 
     post {
         always {
-            node {
-                cleanWs()
-            }
+            cleanWs()  // No need for the 'node' block here
         }
     }
 }
